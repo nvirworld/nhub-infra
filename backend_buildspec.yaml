@@ -1,0 +1,42 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - aws --version
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REPO_URI
+
+      # Dockerfile
+      - |
+        cat << 'EOF' > Dockerfile
+        FROM node:18.16-slim
+
+        RUN echo "node $(node -v)"
+        RUN echo "npm $(npm -v)"
+        RUN echo "yarn $(yarn --version)"
+
+        RUN mkdir -p /app
+        WORKDIR /app
+        COPY . /app
+
+        RUN yarn global add pm2
+        RUN echo "pm2 $(pm2 --version)"
+
+        RUN yarn install
+        RUN yarn build
+        RUN echo $(date +'%Y%m%d%H%M') > /.version
+
+        CMD pm2-runtime start "yarn start:prod"
+        EOF
+  build:
+    commands:
+      - docker build -t $ECR_TAG .
+      - docker tag $ECR_TAG $ECR_REPO_URI:latest
+      - docker tag $ECR_TAG $ECR_REPO_URI:$CODEBUILD_BUILD_NUMBER
+  post_build:
+    commands:
+      - docker push $ECR_REPO_URI:latest
+      - docker push $ECR_REPO_URI:$CODEBUILD_BUILD_NUMBER
+      - printf '[{"name":"%s","imageUri":"%s"}]' $TARGET_ECS_CONTAINER $ECR_REPO_URI:$CODEBUILD_BUILD_NUMBER > imagedefinitions.json
+artifacts:
+  files: imagedefinitions.json

@@ -1,0 +1,19 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 16
+  pre_build:
+    commands:
+      - aws --version
+      - node --version
+      - yarn --version
+      - yarn
+  build:
+    commands:
+      - yarn build
+  post_build:
+    commands:
+      - aws s3 sync $CODEBUILD_SRC_DIR/dist $DEPLOY_TARGET_S3_URI --delete
+      - aws cloudfront create-invalidation --distribution-id $DEPLOY_CLOUDFRONT_DIST_ID --paths '/index.html'
